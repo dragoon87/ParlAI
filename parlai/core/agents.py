@@ -275,6 +275,7 @@ def name_to_agent_class(name):
     return class_name
 
 def load_agent_module(opt):
+    model = opt['model']
     model_file = opt['model_file']
     optfile =  model_file + '.opt'
     if os.path.isfile(optfile):
@@ -288,6 +289,8 @@ def load_agent_module(opt):
                       " (previously:" + str(str(new_opt.get(k, None))) + ") ]")
                 new_opt[k] = v
         new_opt['model_file'] = model_file
+        new_opt['model'] = model
+        print(model)
         model_class = get_agent_module(new_opt['model'])
         return model_class(new_opt)
     else:

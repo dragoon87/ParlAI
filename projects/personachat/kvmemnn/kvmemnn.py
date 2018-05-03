@@ -200,6 +200,7 @@ class KvmemnnAgent(Agent):
 
     def __init__(self, opt, shared=None):
         """Set up model if shared params not set, otherwise no work to do."""
+        print("old old old old ~~~~~~~~~~~")
         super().__init__(opt, shared)
         opt = self.opt
         if opt.get('batchsize', 1) > 1:
@@ -469,7 +470,7 @@ class KvmemnnAgent(Agent):
         for i in range(20):
             print(str(ind[i]) + " [" + str(val[i]) + "]: " + self.v2t(torch.Tensor([ind[i]])))
 
-    def predict(self, xs, ys=None, cands=None, cands_txt=None, obs=None):
+    def predict_orig(self, xs, ys=None, cands=None, cands_txt=None, obs=None):
         """Produce a prediction from our model.
         Update the model using the targets if available, otherwise rank
         candidates as well if they are available and param is set.
@@ -753,6 +754,11 @@ class KvmemnnAgent(Agent):
 
     def shutdown(self):
         #"""Save the state of the model when shutdown."""
+        print("shutdown")
+        if hasattr(self, 'logz'):
+            f = open("/tmp/newrnr.txt" + str(self.threadindex), 'w')
+            f.write(self.logz  + '\n')
+            f.close()       
         super().shutdown()
 
     def save(self, path=None):
@@ -777,3 +783,59 @@ class KvmemnnAgent(Agent):
             self.reset()
             self.optimizer.load_state_dict(data['optimizer'])
             self.opt = self.override_opt(data['opt'])
+
+
+    def predict(self, xs, ys=None, cands=None, cands_txt=None, obs=None):
+        #print(str(self.threadindex))
+        """Produce a prediction from our model.
+        Update the model using the targets if available, otherwise rank
+        candidates as well if they are available and param is set.
+        """
+        self.start = 0
+        self.start2 = 0
+        if xs is None:
+            return [{}]
+        if ys is None:
+            return [{}]
+        #return [{}] * xs.size(0)
+        ypred = self.retrieve(xs, ys)
+        tc = None
+        ret = [{'id':'rnr', 'text': ypred, 'text_candidates': tc }]
+        if not hasattr(self, 'logz'):
+            self.logz = open("/tmp/newrnr.txt" + str(self.threadindex), 'w') 
+            self.logcnt=1
+        log = str(self.logcnt) + ' ' + self.observation['text'].replace('\n','\\n') + '\t' + self.observation['labels'][0]
+        log += '\t' + ypred  + '\n'
+        self.logz.write(log)
+        self.logz.flush()
+        if self.observation['episode_done']:
+            self.logcnt = 1
+        else:
+            self.logcnt += 1
+        return ret
+
+    def retrieve(agent, inp, outp):  #q):
+        #xsq = Variable(torch.LongTensor([agent.parse(q)]))
+        mems = []
+        xsq = outp
+        ys = None
+        if agent.fixedX is None:
+            xe, ye = agent.model(xsq, mems, ys, agent.fixedCands)
+            agent.fixedX = ye
+        else:
+            blah = Variable(torch.LongTensor([1]))
+            xe, ye = agent.model(xsq, mems, ys, [blah])
+            ye = agent.fixedX
+        pred = nn.CosineSimilarity().forward(xe,ye)
+        #val,ind=pred.sort(descending=True)
+        #import pdb; pdb.set_trace()
+        #val,ind=pred.sort(descending=True)
+        val,ind = pred.max(0)
+        if val.data[0] > 0.95:
+            pred[ind.data[0]] = -100
+            val,ind = pred.max(0)
+        #for i in range(0,10):
+        #    ypred = agent.fixedCands_txt[ind.data[i]] # match
+        #    print(i, ypred)
+        return agent.fixedCands_txt[ind.data[0]]
+            
